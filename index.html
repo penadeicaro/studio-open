@@ -19,6 +19,27 @@
     padding: 2rem;
   }
   h1 { font-size: 1.2rem; font-weight: 400; letter-spacing: 0.1em; color: #888; text-transform: uppercase; }
+  #current-status {
+    text-align: center;
+    padding: 1.2rem 2rem;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    min-width: 220px;
+    transition: background 0.4s, color 0.4s;
+    background: #1a1a1a;
+    color: #555;
+  }
+  #current-status.open  { background: #052e16; color: #22c55e; }
+  #current-status.closed { background: #2d0000; color: #ef4444; }
+  #current-status small {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 400;
+    margin-top: 4px;
+    opacity: 0.6;
+  }
   #name-input {
     background: #1a1a1a;
     border: 1px solid #333;
@@ -69,6 +90,10 @@
 
 <h1>Studio Status</h1>
 
+<div id="current-status">
+  Carregando…
+</div>
+
 <input id="name-input" type="text" placeholder="Seu nome" maxlength="30" />
 
 <div class="buttons">
@@ -79,31 +104,40 @@
 <p id="status-msg">—</p>
 <button id="subscribe">🔔 Ativar notificações</button>
 
-<!-- Firebase SDKs -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
   import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-  import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-  // ⚠️ Substitua com suas credenciais
   const firebaseConfig = {
-  apiKey: "AIzaSyDSokIjZr-psnD98K8SxArv86xZje1ih10",
-  authDomain: "studioopen-a3957.firebaseapp.com",
-  projectId: "studioopen-a3957",
-  storageBucket: "studioopen-a3957.firebasestorage.app",
-  messagingSenderId: "333518249480",
-  appId: "1:333518249480:web:29c56bbec557cc18ff3bbd"
-	};
+    apiKey: "AIzaSyDSokIjZr-psnD98K8SxArv86xZje1ih10",
+    authDomain: "studioopen-a3957.firebaseapp.com",
+    projectId: "studioopen-a3957",
+    storageBucket: "studioopen-a3957.firebasestorage.app",
+    messagingSenderId: "333518249480",
+    appId: "1:333518249480:web:29c56bbec557cc18ff3bbd"
+  };
 
-  const VAPID_KEY = "BBttzy9AljP2LUdGk2E0HnfGmjBAKDPEeE4lhkNUUX6q4xDS4j1QKbEN5H2yiIolsbxl-gjMNhZMqa2m7eVgQR8"; // Project Settings → Cloud Messaging → Web Push certificates
+  const VAPID_KEY = "BBttzy9AljP2LUdGk2E0HnfGmjBAKDPEeE4lhkNUUX6q4xDS4j1QKbEN5H2yiIolsbxl-gjMNhZMqa2m7eVgQR8";
 
   const app = initializeApp(firebaseConfig);
   const messaging = getMessaging(app);
   const functions = getFunctions(app);
   const db = getFirestore(app);
-
   const statusMsg = document.getElementById("status-msg");
+  const currentStatus = document.getElementById("current-status");
+
+  // Escuta o status em tempo real
+  onSnapshot(doc(db, "status", "current"), (snap) => {
+    if (!snap.exists()) { currentStatus.textContent = "Sem status ainda."; return; }
+    const { state, name } = snap.data();
+    const isOpen = state === "open";
+    currentStatus.className = isOpen ? "open" : "closed";
+    currentStatus.innerHTML = isOpen
+      ? `✅ Studio Open<small>por ${name}</small>`
+      : `🔴 Studio Closed<small>por ${name}</small>`;
+  });
 
   // Registrar token FCM
   document.getElementById("subscribe").addEventListener("click", async () => {
@@ -111,7 +145,7 @@
       const permission = await Notification.requestPermission();
       if (permission !== "granted") { statusMsg.textContent = "Permissão negada."; return; }
       const swReg = await navigator.serviceWorker.register("/studio-open/firebase-messaging-sw.js");
-	  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       await setDoc(doc(db, "tokens", token), { createdAt: Date.now() });
       statusMsg.textContent = "✓ Notificações ativadas!";
     } catch (e) {
@@ -121,20 +155,22 @@
 
   // Notificação em foreground
   onMessage(messaging, (payload) => {
-  if (typeof Notification !== "undefined") {
-    new Notification(payload.notification.title, { body: payload.notification.body });
-  }
-});
+    if (typeof Notification !== "undefined") {
+      new Notification(payload.notification.title, { body: payload.notification.body });
+    }
+  });
 
   // Enviar status
-  async function sendStatus(status) {
+  async function sendStatus(state) {
     const name = document.getElementById("name-input").value.trim() || "Alguém";
     const btns = document.querySelectorAll("button");
     btns.forEach(b => b.disabled = true);
     statusMsg.textContent = "Enviando…";
     try {
+      // Salva o status atual no Firestore
+      await setDoc(doc(db, "status", "current"), { state, name, updatedAt: Date.now() });
       const fn = httpsCallable(functions, "sendStudioNotification");
-      const result = await fn({ status, name });
+      const result = await fn({ status: state, name });
       statusMsg.textContent = `✓ Enviado para ${result.data.sent} pessoa(s).`;
     } catch (e) {
       statusMsg.textContent = "Erro: " + e.message;
