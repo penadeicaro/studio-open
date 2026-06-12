@@ -99,7 +99,8 @@
   const VAPID_KEY = "BBttzy9AljP2LUdGk2E0HnfGmjBAKDPEeE4lhkNUUX6q4xDS4j1QKbEN5H2yiIolsbxl-gjMNhZMqa2m7eVgQR8"; // Project Settings → Cloud Messaging → Web Push certificates
 
   const app = initializeApp(firebaseConfig);
-  const messaging = getMessaging(app);
+const swReg = await navigator.serviceWorker.register("/studio-open/firebase-messaging-sw.js");
+const messaging = getMessaging(app, { serviceWorkerRegistration: swReg });
   const functions = getFunctions(app);
   const db = getFirestore(app);
 
