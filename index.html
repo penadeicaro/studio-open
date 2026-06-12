@@ -99,8 +99,7 @@
   const VAPID_KEY = "BBttzy9AljP2LUdGk2E0HnfGmjBAKDPEeE4lhkNUUX6q4xDS4j1QKbEN5H2yiIolsbxl-gjMNhZMqa2m7eVgQR8"; // Project Settings → Cloud Messaging → Web Push certificates
 
   const app = initializeApp(firebaseConfig);
-const swReg = await navigator.serviceWorker.register("/studio-open/firebase-messaging-sw.js");
-const messaging = getMessaging(app, { serviceWorkerRegistration: swReg });
+  const messaging = getMessaging(app);
   const functions = getFunctions(app);
   const db = getFirestore(app);
 
@@ -111,7 +110,8 @@ const messaging = getMessaging(app, { serviceWorkerRegistration: swReg });
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") { statusMsg.textContent = "Permissão negada."; return; }
-      const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+      const swReg = await navigator.serviceWorker.register("/studio-open/firebase-messaging-sw.js");
+	  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
       await setDoc(doc(db, "tokens", token), { createdAt: Date.now() });
       statusMsg.textContent = "✓ Notificações ativadas!";
     } catch (e) {
