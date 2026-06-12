@@ -121,8 +121,10 @@
 
   // Notificação em foreground
   onMessage(messaging, (payload) => {
+  if (typeof Notification !== "undefined") {
     new Notification(payload.notification.title, { body: payload.notification.body });
-  });
+  }
+});
 
   // Enviar status
   async function sendStatus(status) {
