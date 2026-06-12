@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Studio Status</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f0f0f;
+    color: #f0f0f0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2rem;
+    padding: 2rem;
+  }
+  h1 { font-size: 1.2rem; font-weight: 400; letter-spacing: 0.1em; color: #888; text-transform: uppercase; }
+  #name-input {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #f0f0f0;
+    font-size: 1rem;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    width: 220px;
+    outline: none;
+  }
+  #name-input:focus { border-color: #555; }
+  .buttons { display: flex; gap: 1rem; }
+  button {
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 1rem 2rem;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  #btn-open  { background: #22c55e; color: #052e16; }
+  #btn-close { background: #ef4444; color: #2d0000; }
+  #status-msg {
+    font-size: 0.9rem;
+    color: #888;
+    min-height: 1.4em;
+    text-align: center;
+  }
+  #subscribe {
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 8px;
+    color: #888;
+    cursor: pointer;
+    font-size: 0.8rem;
+    padding: 0.5rem 1rem;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  #subscribe:hover { border-color: #555; color: #f0f0f0; }
+</style>
+</head>
+<body>
+
+<h1>Studio Status</h1>
+
+<input id="name-input" type="text" placeholder="Seu nome" maxlength="30" />
+
+<div class="buttons">
+  <button id="btn-open">✅ Studio Open</button>
+  <button id="btn-close">🔴 Studio Closed</button>
+</div>
+
+<p id="status-msg">—</p>
+<button id="subscribe">🔔 Ativar notificações</button>
+
+<!-- Firebase SDKs -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
+  import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
+  import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  // ⚠️ Substitua com suas credenciais
+  const firebaseConfig = {
+  apiKey: "AIzaSyDSokIjZr-psnD98K8SxArv86xZje1ih10",
+  authDomain: "studioopen-a3957.firebaseapp.com",
+  projectId: "studioopen-a3957",
+  storageBucket: "studioopen-a3957.firebasestorage.app",
+  messagingSenderId: "333518249480",
+  appId: "1:333518249480:web:29c56bbec557cc18ff3bbd"
+	};
+
+  const VAPID_KEY = "BBttzy9AljP2LUdGk2E0HnfGmjBAKDPEeE4lhkNUUX6q4xDS4j1QKbEN5H2yiIolsbxl-gjMNhZMqa2m7eVgQR8"; // Project Settings → Cloud Messaging → Web Push certificates
+
+  const app = initializeApp(firebaseConfig);
+  const messaging = getMessaging(app);
+  const functions = getFunctions(app);
+  const db = getFirestore(app);
+
+  const statusMsg = document.getElementById("status-msg");
+
+  // Registrar token FCM
+  document.getElementById("subscribe").addEventListener("click", async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") { statusMsg.textContent = "Permissão negada."; return; }
+      const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+      await setDoc(doc(db, "tokens", token), { createdAt: Date.now() });
+      statusMsg.textContent = "✓ Notificações ativadas!";
+    } catch (e) {
+      statusMsg.textContent = "Erro ao ativar: " + e.message;
+    }
+  });
+
+  // Notificação em foreground
+  onMessage(messaging, (payload) => {
+    new Notification(payload.notification.title, { body: payload.notification.body });
+  });
+
+  // Enviar status
+  async function sendStatus(status) {
+    const name = document.getElementById("name-input").value.trim() || "Alguém";
+    const btns = document.querySelectorAll("button");
+    btns.forEach(b => b.disabled = true);
+    statusMsg.textContent = "Enviando…";
+    try {
+      const fn = httpsCallable(functions, "sendStudioNotification");
+      const result = await fn({ status, name });
+      statusMsg.textContent = `✓ Enviado para ${result.data.sent} pessoa(s).`;
+    } catch (e) {
+      statusMsg.textContent = "Erro: " + e.message;
+    } finally {
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  document.getElementById("btn-open").addEventListener("click", () => sendStatus("open"));
+  document.getElementById("btn-close").addEventListener("click", () => sendStatus("closed"));
+</script>
+</body>
+</html>
