@@ -161,7 +161,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging.js";
   import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js";
-  import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getFirestore, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDSokIjZr-psnD98K8SxArv86xZje1ih10",
@@ -225,6 +225,13 @@
       if (permission !== "granted") { statusMsg.textContent = "Permissão negada."; return; }
       const swReg = await navigator.serviceWorker.register("/studio-open/firebase-messaging-sw.js");
       const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+
+      const oldToken = localStorage.getItem("fcm_token");
+      if (oldToken && oldToken !== token) {
+        try { await deleteDoc(doc(db, "tokens", oldToken)); } catch (e) { console.warn("Falha ao remover token antigo:", e); }
+      }
+      localStorage.setItem("fcm_token", token);
+
       await setDoc(doc(db, "tokens", token), { createdAt: Date.now() });
       statusMsg.textContent = "✓ Notificações ativadas!";
     } catch (e) {
